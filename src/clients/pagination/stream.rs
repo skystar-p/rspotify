@@ -7,19 +7,20 @@ use std::pin::Pin;
 use futures::{future::Future, stream::Stream};
 
 /// Alias for `futures::stream::Stream<Item = T>`, since async mode is enabled.
-pub type Paginator<'a, T> = Pin<Box<dyn Stream<Item = T> + 'a>>;
+pub type Paginator<'a, T> = Pin<Box<dyn Stream<Item = T> + 'a + Send>>;
 
-pub type RequestFuture<'a, T> = Pin<Box<dyn 'a + Future<Output = ClientResult<Page<T>>>>>;
+pub type RequestFuture<'a, T> = Pin<Box<dyn 'a + Future<Output = ClientResult<Page<T>>> + Send>>;
 
 /// This is used to handle paginated requests automatically.
-pub fn paginate_with_ctx<'a, Ctx: 'a, T, Request>(
+pub fn paginate_with_ctx<'a, Ctx, T, Request>(
     ctx: Ctx,
     req: Request,
     page_size: u32,
 ) -> Paginator<'a, ClientResult<T>>
 where
-    T: 'a + Unpin,
-    Request: 'a + for<'ctx> Fn(&'ctx Ctx, u32, u32) -> RequestFuture<'ctx, T>,
+    T: 'a + Unpin + Send,
+    Ctx: 'a + Send + Sync,
+    Request: 'a + for<'ctx> Fn(&'ctx Ctx, u32, u32) -> RequestFuture<'ctx, T> + Send + Sync,
 {
     use async_stream::stream;
     let mut offset = 0;
@@ -39,9 +40,9 @@ where
 
 pub fn paginate<'a, T, Fut, Request>(req: Request, page_size: u32) -> Paginator<'a, ClientResult<T>>
 where
-    T: 'a + Unpin,
-    Fut: Future<Output = ClientResult<Page<T>>>,
-    Request: 'a + Fn(u32, u32) -> Fut,
+    T: 'a + Unpin + Send,
+    Fut: Future<Output = ClientResult<Page<T>>> + Send,
+    Request: 'a + Fn(u32, u32) -> Fut + Send + Sync,
 {
     use async_stream::stream;
     let mut offset = 0;
